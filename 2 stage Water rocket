@@ -1,0 +1,153 @@
+// separador_cohete.scad
+// Modelo paramétrico para mecanismo de separación de 2 etapas (dos picos / prongs).
+// - Diseñado para botella tipo refresco 2L por defecto.
+// - Exporta piezas individuales: ring (anillo base), prong (cada pico), release_ring (anillo liberador), pivot_pin (perno).
+// Cambia parámetros al inicio si tu botella es diferente.
+
+/////////////  PARÁMETROS  /////////////
+$fn = 64; // resolución
+
+// Dimensiones botella (ajusta si tu botella es distinta)
+bottle_body_dia = 67;   // diámetro medio del cuerpo de la botella (mm)
+bottle_shoulder_dia = 55; // diámetro de la "hombro" donde suelen engancharse ganchos (approx)
+bottle_neck_dia = 28;   // diámetro del cuello (si lo necesitas)
+bottle_lip_thickness = 2.5; // grosor del labio / borde donde enganchar
+
+// Clearance y tolerancias
+clamp_clearance = 0.8;  // espacio entre plástico y botella para fácil montaje (mm)
+hinge_pin_dia = 4.0;    // diámetro del pasador de bisagra (puedes usar M4 o pasador de 4mm)
+hinge_hole_clearance = hinge_pin_dia + 0.4; // agujero ligeramente mayor
+wall_thickness = 4.0;   // grosor general de paredes (mm)
+prong_inner_thickness = 6.0; // espesor del prong que agarra la botella
+
+// Geometría del anillo base
+ring_inner_dia = bottle_body_dia + clamp_clearance; // diámetro interior del anillo que rodea la botella
+ring_width = 20; // altura axial del anillo (mm)
+ring_outer_extra = 12; // margen externo (reduce deformación)
+
+// Geometría de los picos/prongs
+prong_length = 70; // cuánto sobresale para sujetar (mm)
+prong_height = ring_width + 6; // altura total del prong
+prong_angle_open = 28; // ángulo que abrirá el prong al liberar (grados)
+hook_depth = 8; // profundidad del gancho que engancha la botella (mm)
+hook_radius = 6; // radio de la curva del gancho
+
+// Release ring (anillo que, al moverse axialmente, permite que los prongs se suelten)
+release_ring_thickness = 6;
+release_ring_overlap = 10; // cuánto solapa con el anillo base para bloquear los prongs
+
+// Impresión / montaje
+pivot_pin_length = 22; // longitud del perno (mm)
+screw_m3_hole = 3.2; // agujero para tornillo M3 si se requiere
+
+/////////////  MÓDULOS  /////////////
+
+// ring: anillo base que sujeta y sirve de punto de bisagra
+module ring() {
+    outer_d = ring_inner_dia + 2*wall_thickness + ring_outer_extra;
+    difference() {
+        // cuerpo del anillo
+        translate([0,0,0])
+            cylinder(h = ring_width, r = outer_d/2);
+        // hueco interior (donde va la botella)
+        translate([0,0, -1])
+            cylinder(h = ring_width+2, r = ring_inner_dia/2);
+        // hueco para release_ring moverse axialmente (espacio)
+    }
+}
+
+// prong: un prong (pico). Generado verticalmente; se colocan dos en mirror para ensamblar.
+module prong() {
+    // base de montaje (para bisagra)
+    base_w = wall_thickness + 2;
+    base_h = 12;
+    // cuerpo del brazo
+    arm_len = prong_length;
+    arm_thick = prong_inner_thickness;
+    arm_height = prong_height;
+
+    union() {
+        // base con agujero para pin
+        translate([0,0,0]) {
+            difference() {
+                cube([base_w, arm_thick, base_h], center=true);
+                // agujero para perno (centrado en el borde que conecta al anillo)
+                translate([0,0,0])
+                    rotate([0,90,0])
+                    translate([0, -(base_h/2), 0])
+                        cylinder(h = base_w+4, r = hinge_hole_clearance/2, center=true);
+            }
+        }
+
+        // brazo arqueado hacia fuera
+        // usamos hull() para suavizar unión
+        translate([base_w/2 + arm_len/2, 0, base_h/2])
+            rotate([0,0, -10])
+                linear_extrude(height = arm_height)
+                    offset(r = arm_thick/2)
+                        translate([ -arm_len/2, -arm_thick/2])
+                            square([arm_len, arm_thick], center=true);
+
+        // gancho en la punta para agarrar el labio
+        translate([base_w/2 + arm_len - hook_depth/2, 0, base_h/2])
+            rotate([0,0,0])
+                union() {
+                    translate([0,0,0]) cylinder(h=arm_thick, r=hook_radius);
+                    translate([0,0,0]) cube([hook_depth, arm_thick, arm_height/1.7], center=true);
+                }
+    }
+}
+
+// release_ring: collar que impide que prongs se abran. Se desplaza axialmente para liberar.
+module release_ring() {
+    rr_outer = ring_inner_dia + 2*wall_thickness + ring_outer_extra - 2;
+    rr_inner = ring_inner_dia + 0.6; // algo mayor que interior para deslizar sobre la botella
+    h = release_ring_thickness;
+    difference() {
+        translate([0,0,0]) cylinder(h=h, r=rr_outer/2);
+        translate([0,0,-1]) cylinder(h=h+2, r=rr_inner/2);
+        // recorte para clearance de prongs (para que el release ring empuje sobre la base)
+        translate([0,0,-2])
+            rotate_extrude($fn=64)
+                translate([rr_inner/2 + 1,0,0])
+                    square([10, h+4], center=false);
+    }
+}
+
+// pivot_pin: pasador simple para bisagra (puedes imprimir o usar pasador metálico)
+module pivot_pin() {
+    cylinder(h = pivot_pin_length, r = hinge_pin_dia/2);
+}
+
+/////////////  ENSAMBLAJE (vista)  /////////////
+// Esta sección posiciona piezas para visualización y export.
+// Para exportar por separado, comenta los objetos que no necesites y renderiza individualmente.
+
+translate([-120, -40, 0]) {
+    // anillo base
+    color([0.8,0.6,0.3])
+        ring();
+}
+
+translate([0, -40, 0]) {
+    // prong izquierda (rotada para mostrar)
+    rotate([0,0, prong_angle_open/2])
+        translate([0,0,0]) color([0.6,0.6,0.8]) prong();
+}
+
+translate([80, -40, 0]) {
+    // prong derecha (mirror)
+    rotate([0,0, -prong_angle_open/2])
+        mirror([0,1,0]) color([0.6,0.6,0.8]) prong();
+}
+
+translate([-120, 60, 0]) {
+    color([0.5,0.9,0.5]) release_ring();
+}
+
+translate([80, 60, 0]) {
+    color([0.7,0.7,0.7]) pivot_pin();
+}
+
+// Nota: para exportar en piezas separadas, mueve cada módulo al origen y renderiza/exporta solo ese módulo.
+// Ejemplo para exportar prong: comentar todo excepto "prong();" y centrar con translate([0,0,0]) antes de F6 -> export STL.
